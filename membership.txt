@@ -1,0 +1,330 @@
+pragma solidity ^0.5.12;
+
+import "./turntype.sol";
+import "./authsign.sol";
+
+contract memberdata is turntype , Auth{
+    
+    
+    address public adminwallet = msg.sender;
+    address zeroaddress = 0x0000000000000000000000000000000000000000;
+    uint public schoolamount;
+    uint public studentamount;
+    uint public organizationamount;
+    string public checkadminhash;
+    mapping (uint => School) schools;
+    mapping (uint => Student) students;
+    mapping (uint => Organization) organizations;
+    mapping(bytes32 => uint) accountnum;
+    mapping(string => bool) checkschoolacc;
+    mapping(string => bool) checkstudentacc;
+    mapping(string => bool) checkorgacc;
+    mapping(address=>bool)checkschooladd;
+    mapping(address=>bool)checkstudentadd;
+    mapping(address=>bool)checkorgadd;
+    
+    
+    modifier admin() {
+    require(msg.sender == adminwallet);
+    _;
+    }
+    
+    constructor(string memory _hash)public{
+        checkadminhash=_hash;
+    }
+    
+    struct School { // Struct
+        bytes32 account;
+        bytes32 password;
+        address addr;
+        string name;
+        string id;
+    }
+    
+    struct Student { // Struct
+        bytes32 account;
+        bytes32 password;
+        address addr;
+        address educontract;
+        string name;
+        string id;
+        
+    }
+    
+    struct Organization { // Struct
+        bytes32 account;
+        bytes32 password;
+        address addr;
+        string name;
+        string id;
+    }
+    
+    
+    //搜尋id
+    function getid(uint _type,bytes32 _account)public view returns(uint){
+        if(_type==1){
+          for(uint z=0;z<schoolamount;z++){
+               School storage i = schools[z];
+              if(i.account==_account){
+                  return z;
+              }
+          }  
+        }else if(_type==2){
+          for(uint z=0;z<studentamount;z++){
+               Student storage i = students[z];
+              if(i.account==_account){
+                  return z;
+              }
+          }  
+        }else if(_type==3){
+          for(uint z=0;z<organizationamount;z++){
+               Organization storage i = organizations[z];
+              if(i.account==_account){
+                  return z;
+              }
+          }  
+        }
+    }
+    
+    //checkaccountused 確認帳號否可用
+    function checkaccountused(uint _type,string memory _account)public view returns(bool){
+        if (_type==1){
+             return checkschoolacc[_account];
+        }else if(_type==2){
+             return checkstudentacc[_account];
+        }else if(_type==3){
+             return checkorgacc[_account];
+        }
+    }
+    
+    //checkaddressused 確認地址否可用
+    function checkaddressused(uint _type,address _addr)public view returns(bool){
+        if (_type==1){
+             return checkschooladd[_addr];
+        }else if(_type==2){
+             return checkstudentadd[_addr];
+        }else if(_type==3){
+             return checkorgadd[_addr];
+        }
+    }
+    
+    //register 註冊新帳號
+    function register
+    (uint _type,string memory _account,string memory _password,address _addr,string memory _name,address _educontract,string memory id)
+    public admin returns(string memory identity,uint identityID){
+        bytes32 account=stringToBytes32(_account);
+        bytes32 password=stringToBytes32(_password);
+        require(checkaccountused(_type,_account)==false);
+        if(_type==1){
+            identity = "school";
+            identityID = schoolamount++;
+            schools[identityID] = School(account, password, _addr, _name,id);
+            checkschoolacc[_account]=true;
+            checkschooladd[_addr]=true;
+            return (identity,identityID);
+        }else if(_type==2){
+            identity = "student";
+            identityID = studentamount++;
+            students[identityID] = Student(account, password, _addr,_educontract, _name,id);
+            checkstudentacc[_account]=true;
+            checkstudentadd[_addr]=true;
+            return (identity,identityID);
+        }else if(_type==3){
+            identity = "organization";
+            identityID = organizationamount++;
+            organizations[identityID] = Organization(account, password, _addr, _name,id);
+            checkorgacc[_account]=true;
+            checkstudentadd[_addr]=true;
+            return (identity,identityID);
+        }
+    }
+    
+    //signin 登入功能
+    function signin (uint _type,string memory _account,string memory _password,bytes32 hash, bytes memory sig)public view returns(string memory statu,string memory identity,string memory name,address addr,address contracts){
+        bytes32 account=stringToBytes32(_account);
+        bytes32 password=stringToBytes32(_password);
+        bytes32 deleted = stringToBytes32("deleted");
+        address user=recover(hash,sig);
+            if(_type==1){
+                identity = "school";
+                uint _id=getid(_type,account);
+                School storage i = schools[_id];
+                require(user==adminwallet||user==i.addr,"Auth sign error");
+                if (i.account == deleted &&i.password == deleted&&i.addr==zeroaddress){
+                    return("deleted",identity,"deleted",zeroaddress,zeroaddress);
+                }else if(account==i.account&&password==i.password){
+                    return("success",identity,i.name,i.addr,zeroaddress);
+                }else if(account!=i.account){
+                    return("fail",identity,"account err",zeroaddress,zeroaddress);
+                }else if(account==i.account&& password!=i.password){
+                    return("fail",identity,"password err",zeroaddress,zeroaddress);
+                }
+            }else if(_type==2){
+                identity = "student";
+                uint _id=getid(_type,account);
+                Student storage i = students[_id];
+                require(user==adminwallet||user==i.addr,"Auth sign error");
+                if (i.account == deleted &&i.password == deleted&&i.addr==zeroaddress){
+                    return("deleted",identity,"deleted",zeroaddress,zeroaddress);
+                }else if(account==i.account&&password==i.password){
+                    return("success",identity,i.name,i.addr,i.educontract);
+                }else if(account!=i.account){
+                    return("fail",identity,"account err",zeroaddress,zeroaddress);
+                }else if(account==i.account&& password!=i.password){
+                    return("fail",identity,"password err",zeroaddress,zeroaddress);
+                }
+            }else if(_type==3){
+                identity = "organization";
+                uint _id=getid(_type,account);
+                Organization storage i = organizations[_id];
+                require(user==adminwallet||user==i.addr,"Auth sign error");
+                if (i.account == deleted &&i.password == deleted&&i.addr==zeroaddress){
+                    return("deleted",identity,"deleted",zeroaddress,zeroaddress);
+                }else if(account==i.account&&password==i.password){
+                    return("success",identity,i.name,i.addr,zeroaddress);
+                }else if(account!=i.account){
+                    return("fail",identity,"account err",zeroaddress,zeroaddress);
+                }else if(account==i.account&& password!=i.password){
+                    return("fail",identity,"password err",zeroaddress,zeroaddress);
+                }else if (i.account == deleted &&i.password == deleted&&i.addr==zeroaddress){
+                    return("deleted",identity,"deleted",zeroaddress,zeroaddress);
+                }
+            }
+    }
+    
+    //getmemberlist 取得會員資料表
+    function getmemberlist(uint _type,uint datanum)public view returns(string memory id,string memory name,address _addr,address educontract){
+        if(_type==1){
+            School storage i = schools[datanum];
+            return (i.id,i.name,i.addr,zeroaddress);
+        }else if(_type==2){
+            Student storage i = students[datanum];
+            return (i.id,i.name,i.addr,i.educontract);
+        }else if(_type==3){
+             Organization storage i = organizations[datanum];
+            return (i.id,i.name,i.addr,zeroaddress);
+        }
+    }
+    
+    //changepassword 更改密碼
+    function changepassword (uint _type,string memory _account,string memory _newpassword)public returns(string memory statu,string memory identity,string memory account){
+        bytes32 accounts=stringToBytes32(_account);
+        bytes32 newpassword=stringToBytes32(_newpassword);
+            if(_type==1){
+            identity = "school";
+            uint _id=getid(_type,accounts);
+            School storage i = schools[_id];
+            if(accounts==i.account&&msg.sender==i.addr){
+                schools[_id].password = newpassword ;
+                return("success",identity,bytes32Tostring(i.account));
+            }else if(accounts==i.account&&msg.sender==adminwallet){
+                schools[_id].password = newpassword ;
+                return("success",identity,bytes32Tostring(i.account));
+            }else{
+                return("fail",identity,bytes32Tostring(i.account));
+            }
+        }else if(_type==2){
+            identity = "student";
+            uint _id=getid(_type,accounts);
+            Student storage i = students[_id];
+            if(accounts==i.account&&msg.sender==i.addr){
+                students[_id].password = newpassword ;
+                return("success",identity,bytes32Tostring(i.account));
+            }else if(accounts==i.account&&msg.sender==adminwallet){
+                schools[_id].password = newpassword ;
+                return("success",identity,bytes32Tostring(i.account));
+            }else{
+                return("fail",identity,bytes32Tostring(i.account));
+            }
+        }else if(_type==3){
+            identity = "organization";
+            uint _id=getid(_type,accounts);
+            Organization storage i = organizations[_id];
+            if(accounts==i.account&&msg.sender==i.addr){
+                organizations[_id].password = newpassword;
+                return("success",identity,bytes32Tostring(i.account));
+            }else if(accounts==i.account&&msg.sender==adminwallet){
+                schools[_id].password = newpassword ;
+                return("success",identity,bytes32Tostring(i.account));
+            }else{
+                return("fail",identity,bytes32Tostring(i.account));
+            }
+        }
+    }
+    
+    //changeaddr 更改地地址
+    function changeaddr (uint _type,string memory _account,string memory _password,bytes32 hash, bytes memory sig)public returns(string memory statu,string memory identity,string memory name,address addr){
+        bytes32 account=stringToBytes32(_account);
+        bytes32 password=stringToBytes32(_password);
+        address user=recover(hash,sig);
+            if(_type==1){
+            identity = "school";
+            uint _id=getid(_type,account);
+            School storage i = schools[_id];
+            if(account==i.account&&password==i.password){
+                checkschooladd[schools[_id].addr]=false;
+                schools[_id].addr = user ;
+                checkschooladd[user]=true;
+                return("success",identity,i.name,i.addr);
+            }
+        }else if(_type==2){
+            identity = "student";
+            uint _id=getid(_type,account);
+            Student storage i = students[_id];
+            if(account==i.account&&password==i.password){
+                checkstudentadd[students[_id].addr]=false;
+                students[_id].addr = user ;
+                checkstudentadd[user]=true;
+                return("success",identity,i.name,i.addr);
+            }
+        }else if(_type==3){
+            identity = "organization";
+            uint _id=getid(_type,account);
+            Organization storage i = organizations[_id];
+            if(account==i.account&&password==i.password){
+                checkorgadd[organizations[_id].addr]=false;
+                organizations[_id].addr = user;
+                checkorgadd[user]=true;
+                return("success",identity,i.name,i.addr);
+            }
+        }
+    }
+    
+    
+    //deletedata 刪除資料
+    function deletedata(uint _type,string memory _account)public admin returns(string memory statu,string memory identity,string memory name){
+        bytes32 account=stringToBytes32(_account);
+        bytes32 deleted = stringToBytes32("deleted");
+            if(_type==1){
+            identity = "school";
+            uint _id=getid(_type,account);
+            School storage i = schools[_id];
+            if(account==i.account){
+                schools[_id] = School(deleted, deleted, zeroaddress, "deleted","null");
+                return("deleteSuccess",identity,i.name);
+            }else{
+                 return("deletefail",identity,"nofound");
+            }
+        }else if(_type==2){
+            identity = "student";
+            uint _id=getid(_type,account);
+            Student storage i = students[_id];
+            if(account==i.account){
+                students[_id] = Student(deleted, deleted, zeroaddress,  zeroaddress, "deleted","null");
+                return("deleteSuccess",identity,i.name);
+            }else{
+                 return("deletefail",identity,"nofound");
+            }
+        }else if(_type==3){
+            identity = "organization";
+            uint _id=getid(_type,account);
+            Organization storage i = organizations[_id];
+            if(account==i.account){
+                organizations[_id] = Organization(deleted, deleted, zeroaddress, "deleted","null");
+                return("deleteSuccess",identity,i.name);
+            }else{
+                 return("deletefail",identity,"nofound");
+            }
+        }
+    }
+}

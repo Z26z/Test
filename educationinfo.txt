@@ -1,0 +1,177 @@
+pragma solidity ^0.5.12;
+
+import "./turntype.sol";
+import "./authsign.sol";
+
+contract StudentEducationinfo is turntype, Auth {
+    address public adminwallet = msg.sender;
+    address ownerwallet;
+    uint256 public educounter;
+    string public checkadminhash;
+    mapping(uint256 => Studentinfo) studentdata;
+    mapping(uint256 => Educationinfo) educations;
+    mapping(address => bool) whitelists;
+
+    struct Studentinfo {
+        // Struct
+        bytes32 account;
+        bytes32 password;
+        address addr;
+        string name;
+        string id;
+    }
+
+    struct Educationinfo {
+        // Struct
+        bytes32 department;
+        address addr;
+        string data;
+    }
+
+    modifier admin() {
+        require(msg.sender == adminwallet);
+        _;
+    }
+    modifier owner() {
+        require(msg.sender == ownerwallet);
+        _;
+    }
+
+    //建立會學生初始合約
+    constructor(
+        string memory _account,
+        string memory _password,
+        address _addr,
+        string memory _name,
+        string memory _id,
+        string memory _hash
+    ) public {
+        bytes32 account = stringToBytes32(_account);
+        bytes32 password = stringToBytes32(_password);
+        studentdata[0] = Studentinfo(account, password, _addr, _name, _id);
+        ownerwallet = _addr;
+        educounter = 0;
+        checkadminhash = _hash;
+        whitelists[adminwallet] = true;
+        whitelists[ownerwallet] = true;
+    }
+
+    //搜尋id
+    function getid(bytes32 _department) public view returns (uint256) {
+        for (uint256 z = 0; z < educounter; z++) {
+            Educationinfo storage i = educations[z];
+            if (i.department == _department) {
+                return z;
+            }
+        }
+    }
+
+    //getstudentinfo 取得擁有人資料
+    function getstudentinfo(bytes32 hash, bytes memory sig)
+        public
+        view
+        returns (
+            string memory statu,
+            string memory account,
+            string memory password,
+            address addr,
+            string memory name,
+            string memory id
+        )
+    {
+        require(msg.sender == ownerwallet || msg.sender == adminwallet);
+        if (recover(hash, sig) == msg.sender) {
+            Studentinfo storage i = studentdata[0];
+            return (
+                "success",
+                bytes32Tostring(i.account),
+                bytes32Tostring(i.password),
+                i.addr,
+                i.name,
+                i.id
+            );
+        } else {
+            return ("fail", "null", "null", msg.sender, "null", "null");
+        }
+    }
+
+    //inputeduinfo 輸入學歷資料
+    function inputeduinfo(
+        string memory _department,
+        address _addr,
+        string memory _data
+    )
+        public
+        returns (
+            string memory statu,
+            string memory departmentname,
+            uint256 counter
+        )
+    {
+        require(msg.sender == adminwallet || msg.sender == _addr);
+        bytes32 department = stringToBytes32(_department);
+        counter = educounter++;
+        educations[counter] = Educationinfo(department, _addr, _data);
+        return ("Addsuccess", _department, counter);
+    }
+
+    //modifyeduinfo 修改學歷資料
+    function modifyeduinfo(
+        string memory _department,
+        address _addr,
+        string memory _data
+    )
+        public
+        returns (
+            string memory statu,
+            string memory departmentname,
+            string memory data
+        )
+    {
+        require(msg.sender == adminwallet || msg.sender == _addr);
+        bytes32 deps = stringToBytes32(_department);
+        uint256 departmentnum = getid(deps);
+        Educationinfo storage i = educations[departmentnum];
+        educations[departmentnum] = Educationinfo(i.department, i.addr, _data);
+        string memory department = bytes32Tostring(i.department);
+        return ("Modifysuccess", department, i.data);
+    }
+
+    //geteduinfo 取得學歷資料
+    function geteduinfo(
+        uint256 _educount,
+        bytes32 hash,
+        bytes memory sig
+    ) public view returns (string memory department, string memory data) {
+        require(whitelists[msg.sender] == true);
+        if (recover(hash, sig) == msg.sender) {
+            Educationinfo storage i = educations[_educount];
+            return (bytes32Tostring(i.department), i.data);
+        } else {
+            return ("null", "null");
+        }
+    }
+
+    //setwhitelist 設定可取得資料的人
+    function setwhitelist(address _reader)
+        public
+        returns (
+            string memory statu,
+            address reader,
+            bool readstatu
+        )
+    {
+        require(msg.sender == ownerwallet || msg.sender == adminwallet);
+        if (whitelists[_reader] == true) {
+            whitelists[_reader] = false;
+        } else {
+            whitelists[_reader] = true;
+        }
+        return ("Setsuccess", _reader, whitelists[_reader]);
+    }
+
+    //checkreader 確認地址是否可讀
+    function checkreader(address _reader) public view returns (bool) {
+        return whitelists[_reader];
+    }
+}
